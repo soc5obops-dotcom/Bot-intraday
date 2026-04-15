@@ -371,6 +371,10 @@ class SeatalkBotService:
             str(self.config.image_border_px),
             "-resize",
             f"{self.config.image_resize_width}x>",
+            "-sharpen",
+            "0x1",
+            "-quality",
+            "100",
             "-strip",
             str(final_png_path),
         ]

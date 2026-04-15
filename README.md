@@ -6,7 +6,7 @@ Lightweight bot server for SeaTalk with this capture flow:
 
 1. export Google Sheets range `B2:M30` to PDF
 2. convert PDF to PNG with Poppler
-3. trim and optimize PNG with ImageMagick
+3. trim, optimize, sharpen, and enhance PNG with ImageMagick
 4. send a single interactive message card to the SeaTalk group
 5. repeat daily at 7am, 9am, 10am, 11am, 12nn, 3pm, 5pm, 7pm, and 8pm
 
