@@ -16,5 +16,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY bot_server.py /app/bot_server.py
 COPY README.md /app/README.md
+COPY .env /app/.env
+COPY google-service-account.json /app/google-service-account.json
 
 CMD ["python", "bot_server.py"]
