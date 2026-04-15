@@ -8,7 +8,7 @@ Lightweight bot server for SeaTalk with this capture flow:
 2. convert PDF to PNG with Poppler
 3. trim and optimize PNG with ImageMagick
 4. send a single interactive message card to the SeaTalk group
-5. repeat every 10 minutes
+5. repeat daily at 7am, 9am, 10am, 11am, 12nn, 3pm, 5pm, 7pm, and 8pm
 
 ## Message format
 

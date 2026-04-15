@@ -216,11 +216,24 @@ class SeatalkBotService:
 
     def seconds_until_next_run(self) -> float:
         now = datetime.now(self.timezone)
-        interval = self.config.interval_minutes
-        minute_bucket = (now.minute // interval) * interval
-        next_run = now.replace(minute=minute_bucket, second=0, microsecond=0)
-        if next_run <= now:
-            next_run += timedelta(minutes=interval)
+        # Scheduled hours: 7am, 9am, 10am, 11am, 12nn, 3pm, 5pm, 7pm, 8pm
+        scheduled_hours = [7, 9, 10, 11, 12, 15, 17, 19, 20]
+        
+        today = now.date()
+        tomorrow = today + timedelta(days=1)
+        
+        # Find next run time today
+        next_run = None
+        for hour in scheduled_hours:
+            candidate = datetime.combine(today, datetime.min.time().replace(hour=hour), tzinfo=self.timezone)
+            if candidate > now:
+                next_run = candidate
+                break
+        
+        # If no more runs today, schedule for tomorrow's first time
+        if next_run is None:
+            next_run = datetime.combine(tomorrow, datetime.min.time().replace(hour=scheduled_hours[0]), tzinfo=self.timezone)
+        
         return max((next_run - now).total_seconds(), 1.0)
 
     def trigger_async(self, trigger: str) -> bool:
@@ -453,7 +466,7 @@ class SeatalkBotService:
             "last_run_succeeded_at": self.last_run_succeeded_at.isoformat() if self.last_run_succeeded_at else None,
             "next_run_at": next_run_at.isoformat(),
             "last_error": self.last_error,
-            "interval_minutes": self.config.interval_minutes,
+            "scheduled_hours": [7, 9, 10, 11, 12, 15, 17, 19, 20],
             "capture_range": self.config.capture_range,
             "tab_name": self.config.tab_name,
         }
