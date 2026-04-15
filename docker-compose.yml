@@ -7,25 +7,23 @@ services:
       - "8080:8080"
     environment:
       # Required settings
-      - SHEET_ID=1pLN46ZKWJIsidswMeoxhZwoacuFMR08sCaTFG6mLytc
-      - TAB_NAME=SOC 5
-      - SEATALK_WEBHOOK_URL=https://openapi.seatalk.io/webhook/group/o3YbNxsGSdOxvzh_0kgd-A
-      - CAPTURE_RANGE=F1:S95
-      - REPORT_LINK=https://docs.google.com/spreadsheets/d/14tebbxdo4nDHnr4tiqFBhxXQPl0Fr1mDWehsr6t6Qz8/edit?usp=drivesdk
+      - SHEET_ID=${SHEET_ID}
+      - TAB_NAME=${TAB_NAME}
+      - SEATALK_WEBHOOK_URL=${SEATALK_WEBHOOK_URL}
+      - CAPTURE_RANGE=${CAPTURE_RANGE:-B2:M30}
+      - REPORT_LINK=${REPORT_LINK}
 
       # Optional settings
-      - BOT_HOST=0.0.0.0
-      - BOT_PORT=8080
-      - BOT_TIMEZONE=Asia/Manila
-      - BOT_REQUEST_TIMEOUT_SECONDS=30
-      - BOT_RUN_ON_STARTUP=false
-      - BOT_PDF_DPI=400
-      - BOT_IMAGE_BORDER_PX=20
-      - BOT_IMAGE_RESIZE_WIDTH=2200
-      - BOT_USE_ENV_PROXY=false
-      - LOG_LEVEL=INFO
-
-      # Google Service Account (base64 encoded JSON)
-      - GOOGLE_SERVICE_ACCOUNT_JSON
+      - BOT_HOST=${BOT_HOST:-0.0.0.0}
+      - BOT_PORT=${BOT_PORT:-8080}
+      - BOT_TIMEZONE=${BOT_TIMEZONE:-Asia/Manila}
+      - BOT_REQUEST_TIMEOUT_SECONDS=${BOT_REQUEST_TIMEOUT_SECONDS:-30}
+      - BOT_RUN_ON_STARTUP=${BOT_RUN_ON_STARTUP:-false}
+      - BOT_PDF_DPI=${BOT_PDF_DPI:-400}
+      - BOT_IMAGE_BORDER_PX=${BOT_IMAGE_BORDER_PX:-20}
+      - BOT_IMAGE_RESIZE_WIDTH=${BOT_IMAGE_RESIZE_WIDTH:-2200}
+      - BOT_USE_ENV_PROXY=${BOT_USE_ENV_PROXY:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - GOOGLE_SERVICE_ACCOUNT_FILE=${GOOGLE_SERVICE_ACCOUNT_FILE:-google-service-account.json}
     volumes:
       - ./google-service-account.json:/app/google-service-account.json:ro
