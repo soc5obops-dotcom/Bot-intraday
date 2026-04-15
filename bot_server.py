@@ -118,7 +118,7 @@ def load_config() -> Config:
             get_setting(env_file_values, "request_timeout_seconds", "BOT_REQUEST_TIMEOUT_SECONDS", "30")
         ),
         run_on_startup=parse_bool(get_setting(env_file_values, "run_on_startup", "BOT_RUN_ON_STARTUP", ""), False),
-        pdf_dpi=int(get_setting(env_file_values, "pdf_dpi", "BOT_PDF_DPI", "220")),
+        pdf_dpi=int(get_setting(env_file_values, "pdf_dpi", "BOT_PDF_DPI", "400")),
         image_border_px=int(get_setting(env_file_values, "image_border_px", "BOT_IMAGE_BORDER_PX", "20")),
         image_resize_width=int(get_setting(env_file_values, "image_resize_width", "BOT_IMAGE_RESIZE_WIDTH", "2200")),
         use_env_proxy=parse_bool(get_setting(env_file_values, "use_env_proxy", "BOT_USE_ENV_PROXY", ""), False),
@@ -195,7 +195,7 @@ class SeatalkBotService:
         self.scheduler_thread = threading.Thread(target=self.scheduler_loop, name="seatalk-scheduler", daemon=True)
 
         ensure_binary("pdftocairo")
-        ensure_binary("magick")
+        ensure_binary("convert")
 
     def start(self) -> None:
         self.scheduler_thread.start()
@@ -348,7 +348,7 @@ class SeatalkBotService:
 
     def optimize_png(self, raw_png_path: Path, final_png_path: Path) -> None:
         command = [
-            "magick",
+            "convert",
             str(raw_png_path),
             "-trim",
             "+repage",
@@ -381,13 +381,13 @@ class SeatalkBotService:
                     {
                         "element_type": "title",
                         "title": {
-                            "text": f"Update as of {timestamp}",
+                            "text": f"SOC 5 OTP/MDT & Prod as of {timestamp}",
                         },
                     },
                     {
                         "element_type": "description",
                         "description": {
-                            "text": "-",
+                            "text": "Datasets sourced from Control Tower V1",
                         },
                     },
                     {
