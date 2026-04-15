@@ -18,4 +18,3 @@ COPY bot_server.py /app/bot_server.py
 COPY README.md /app/README.md
 
 CMD ["python", "bot_server.py"]
-. 
