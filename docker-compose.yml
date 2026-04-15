@@ -5,6 +5,27 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    environment:
+      # Required settings
+      - SHEET_ID=1pLN46ZKWJIsidswMeoxhZwoacuFMR08sCaTFG6mLytc
+      - TAB_NAME=SOC 5
+      - SEATALK_WEBHOOK_URL=https://openapi.seatalk.io/webhook/group/o3YbNxsGSdOxvzh_0kgd-A
+      - CAPTURE_RANGE=F1:S95
+      - REPORT_LINK=https://docs.google.com/spreadsheets/d/14tebbxdo4nDHnr4tiqFBhxXQPl0Fr1mDWehsr6t6Qz8/edit?usp=drivesdk
+
+      # Optional settings
+      - BOT_HOST=0.0.0.0
+      - BOT_PORT=8080
+      - BOT_TIMEZONE=Asia/Manila
+      - BOT_REQUEST_TIMEOUT_SECONDS=30
+      - BOT_RUN_ON_STARTUP=false
+      - BOT_PDF_DPI=400
+      - BOT_IMAGE_BORDER_PX=20
+      - BOT_IMAGE_RESIZE_WIDTH=2200
+      - BOT_USE_ENV_PROXY=false
+      - LOG_LEVEL=INFO
+
+      # Google Service Account (base64 encoded JSON)
+      - GOOGLE_SERVICE_ACCOUNT_JSON
     volumes:
-      - ./.env:/app/.env:ro
       - ./google-service-account.json:/app/google-service-account.json:ro
