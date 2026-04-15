@@ -1,12 +1,11 @@
-sheet_id: your-google-sheet-id
-tab_name: bot_server
-seatalk_webhook_url: https://openapi.seatalk.io/webhook/group/your-webhook-id
-capture_range: B2:M30
-report_link: https://docs.google.com/spreadsheets/d/your-google-sheet-id/edit?gid=your-tab-gid#gid=your-tab-gid
-
+sheet_id: 1pLN46ZKWJIsidswMeoxhZwoacuFMR08sCaTFG6mLytc
+tab_name: SOC 5
+seatalk_webhook_url: https://openapi.seatalk.io/webhook/group/o3YbNxsGSdOxvzh_0kgd-A
+capture_range: F1:S95
+report_link: https://docs.google.com/spreadsheets/d/14tebbxdo4nDHnr4tiqFBhxXQPl0Fr1mDWehsr6t6Qz8/edit?usp=drivesdk
 BOT_HOST=0.0.0.0
 BOT_PORT=8080
-BOT_INTERVAL_MINUTES=10
+BOT_INTERVAL_MINUTES=120
 BOT_TIMEZONE=Asia/Manila
 BOT_REQUEST_TIMEOUT_SECONDS=30
 BOT_RUN_ON_STARTUP=false
