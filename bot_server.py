@@ -391,6 +391,7 @@ class SeatalkBotService:
 
     def send_interactive_message(self, now: datetime, image_bytes: bytes) -> dict[str, Any]:
         timestamp = now.strftime("%I:%M %p %b-%d").lstrip("0")
+        otp_last_run = self.fetch_otp_last_run_time()
         payload = {
             "tag": "interactive_message",
             "interactive_message": {
@@ -398,13 +399,13 @@ class SeatalkBotService:
                     {
                         "element_type": "title",
                         "title": {
-                            "text": f"SOC 5 OTP/MDT & Prod as of {timestamp}",
+                            "text": f"SOC 5 OTP & Productivity as of {timestamp}",
                         },
                     },
                     {
                         "element_type": "description",
                         "description": {
-                            "text": "Datasets sourced from Control Tower V1",
+                            "text": f"OTP Last Run Time: {otp_last_run}",
                         },
                     },
                     {
@@ -502,6 +503,18 @@ def build_handler(service: SeatalkBotService) -> type[BaseHTTPRequestHandler]:
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def fetch_otp_last_run_time(self) -> str:
+            sheet = self.sheets_service.spreadsheets()
+            result = sheet.values().get(
+                spreadsheetId=self.config.sheet_id,
+                range=f"{self.config.tab_name}!M1:N1",
+                majorDimension='ROWS'
+            ).execute()
+            values = result.get('values', [])
+            if values and values[0]:
+                return " - ".join(values[0])  # Or customize formatting as needed
+            return "Unavailable"
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
             LOGGER.info("%s - %s", self.address_string(), format % args)
