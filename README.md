@@ -4,20 +4,21 @@
 
 Lightweight bot server for SeaTalk with this capture flow:
 
-1. export Google Sheets range `B2:M30` to PDF
-2. convert PDF to PNG with Poppler
-3. trim, optimize, sharpen, and enhance PNG with ImageMagick
-4. send a single interactive message card to the SeaTalk group
-5. repeat daily at 7am, 9am, 10am, 11am, 12nn, 3pm, 5pm, 7pm, and 8pm
+1. check whether new non-blank values appeared in `F7:AC7`
+2. export the configured Google Sheets capture range to PDF
+3. convert PDF to PNG with Poppler
+4. trim, optimize, sharpen, and enhance PNG with ImageMagick
+5. send a single interactive message card to the SeaTalk group only when new values are detected
+6. repeat on the configured `BOT_INTERVAL_MINUTES`
 
 ## Message format
 
-Each run sends one interactive message card:
+Each send posts one interactive message card:
 
 ```text
 [Interactive Message]
-Title: 🚚 On-Queue & Unloading Update
-Description: as of **h:mm AM/PM Mmm-dd**
+Title: SOC 5 OTP Hourly Update as of Apr-16 9:30 AM
+Description: FMS Latest Update: Apr-16 9:00 AM - Completed
 Image: rendered report snapshot
 Button: View Report Link
 ```
@@ -28,7 +29,7 @@ The app reads the existing local `.env` file format directly:
 
 ```text
 sheet_id: <google-sheet-id>
-tab_name: bot_server
+tab_name: otp_hourly
 seatalk_webhook_url: <seatalk-webhook-url>
 capture_range: B2:M30
 report_link: <google-sheet-report-link>
@@ -39,7 +40,7 @@ Optional settings:
 ```text
 BOT_HOST=0.0.0.0
 BOT_PORT=8080
-BOT_INTERVAL_MINUTES=10
+BOT_INTERVAL_MINUTES=60
 BOT_TIMEZONE=Asia/Manila
 BOT_REQUEST_TIMEOUT_SECONDS=30
 BOT_RUN_ON_STARTUP=false
@@ -51,6 +52,8 @@ GOOGLE_SERVICE_ACCOUNT_FILE=google-service-account.json
 ```
 
 Use `.env.example` as the committed template and keep real values only in your local `.env`.
+
+The service stores the last seen `F7:AC7` snapshot in `.runtime/seatalk-watch-state.json` so it can suppress duplicate sends across polling cycles and restarts.
 
 ## Docker
 
@@ -81,7 +84,7 @@ docker rm -f seatalk-bot
 ## Endpoints
 
 - `GET /` or `GET /healthz`: current service status
-- `POST /trigger`: manual run outside the 10-minute schedule
+- `POST /trigger`: manual run that sends the current snapshot immediately
 
 ## Notes
 

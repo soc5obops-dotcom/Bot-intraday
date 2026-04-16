@@ -29,6 +29,10 @@ SCOPES = [
 ]
 MAX_SEATALK_IMAGE_BYTES = 5 * 1024 * 1024
 ENV_LINE_PATTERN = re.compile(r"^\s*([A-Za-z0-9_]+)\s*[:=]\s*(.*?)\s*$")
+WATCH_RANGE = "F7:AC7"
+WATCH_RANGE_WIDTH = 24
+FMS_UPDATE_RANGE = "AB1:AC1"
+STATE_FILE_NAME = "seatalk-watch-state.json"
 
 @dataclass(frozen=True)
 class Config:
@@ -63,7 +67,10 @@ def load_env_file(path: Path) -> dict[str, str]:
         if not match:
             continue
         key, value = match.groups()
-        values[key.strip()] = value.strip()
+        cleaned_value = value.strip()
+        if len(cleaned_value) >= 2 and cleaned_value[0] == cleaned_value[-1] and cleaned_value[0] in {"'", '"'}:
+            cleaned_value = cleaned_value[1:-1]
+        values[key.strip()] = cleaned_value
     return values
 
 
@@ -113,7 +120,7 @@ def load_config() -> Config:
         service_account_json=service_account_json,
         host=get_setting(env_file_values, "host", "BOT_HOST", "0.0.0.0"),
         port=int(os.getenv("PORT") or get_setting(env_file_values, "port", "BOT_PORT", "8080")),
-        interval_minutes=int(get_setting(env_file_values, "interval_minutes", "BOT_INTERVAL_MINUTES", "10")),
+        interval_minutes=int(get_setting(env_file_values, "interval_minutes", "BOT_INTERVAL_MINUTES", "60")),
         request_timeout_seconds=int(
             get_setting(env_file_values, "request_timeout_seconds", "BOT_REQUEST_TIMEOUT_SECONDS", "30")
         ),
@@ -160,6 +167,8 @@ class SeatalkBotService:
     def __init__(self, config: Config) -> None:
         self.config = config
         self.timezone = ZoneInfo(config.timezone_name)
+        self.runtime_root = Path(".runtime")
+        self.state_file = self.runtime_root / STATE_FILE_NAME
 
         if config.service_account_json:
             try:
@@ -193,9 +202,11 @@ class SeatalkBotService:
         self.last_run_succeeded_at: datetime | None = None
         self.last_error: str | None = None
         self.scheduler_thread = threading.Thread(target=self.scheduler_loop, name="seatalk-scheduler", daemon=True)
+        self.image_magick_command = "magick" if os.name == "nt" else "convert"
 
+        self.runtime_root.mkdir(exist_ok=True)
         ensure_binary("pdftocairo")
-        ensure_binary("convert")
+        ensure_binary(self.image_magick_command)
 
     def start(self) -> None:
         self.scheduler_thread.start()
@@ -216,25 +227,12 @@ class SeatalkBotService:
 
     def seconds_until_next_run(self) -> float:
         now = datetime.now(self.timezone)
-        # Scheduled hours: 7am, 9am, 10am, 11am, 12nn, 3pm, 5pm, 7pm, 8pm
-        scheduled_hours = [7, 9, 10, 11, 12, 15, 17, 19, 20]
-        
-        today = now.date()
-        tomorrow = today + timedelta(days=1)
-        
-        # Find next run time today
-        next_run = None
-        for hour in scheduled_hours:
-            candidate = datetime.combine(today, datetime.min.time().replace(hour=hour), tzinfo=self.timezone)
-            if candidate > now:
-                next_run = candidate
-                break
-        
-        # If no more runs today, schedule for tomorrow's first time
-        if next_run is None:
-            next_run = datetime.combine(tomorrow, datetime.min.time().replace(hour=scheduled_hours[0]), tzinfo=self.timezone)
-        
-        return max((next_run - now).total_seconds(), 1.0)
+        interval_seconds = self.config.interval_minutes * 60
+        epoch = datetime(1970, 1, 1, tzinfo=self.timezone)
+        elapsed_seconds = (now - epoch).total_seconds()
+        remainder = elapsed_seconds % interval_seconds
+        wait_seconds = interval_seconds - remainder if remainder else interval_seconds
+        return max(wait_seconds, 1.0)
 
     def trigger_async(self, trigger: str) -> bool:
         if self.run_lock.locked():
@@ -252,8 +250,19 @@ class SeatalkBotService:
         LOGGER.info("Starting bot cycle. trigger=%s time=%s", trigger, started_at.isoformat())
 
         try:
+            current_values = self.fetch_watch_values()
+            previous_values = self.load_watch_state()
+
+            if not self.should_send_update(trigger, current_values, previous_values):
+                self.save_watch_state(current_values)
+                self.last_error = None
+                self.last_run_succeeded_at = datetime.now(self.timezone)
+                LOGGER.info("No new values detected in %s. Skipping SeaTalk send.", WATCH_RANGE)
+                return
+
             image_bytes = self.capture_range_as_png()
             self.send_interactive_message(started_at, image_bytes)
+            self.save_watch_state(current_values)
             self.last_error = None
             self.last_run_succeeded_at = datetime.now(self.timezone)
             LOGGER.info("Bot cycle completed successfully.")
@@ -264,10 +273,82 @@ class SeatalkBotService:
             self.last_run_finished_at = datetime.now(self.timezone)
             self.run_lock.release()
 
+    def normalize_watch_values(self, values: list[Any]) -> list[str]:
+        normalized = [str(value).strip() for value in values[:WATCH_RANGE_WIDTH]]
+        if len(normalized) < WATCH_RANGE_WIDTH:
+            normalized.extend([""] * (WATCH_RANGE_WIDTH - len(normalized)))
+        return normalized
+
+    def format_sheet_range(self, cell_range: str) -> str:
+        sheet_name = self.config.tab_name.replace("'", "''")
+        return f"'{sheet_name}'!{cell_range}"
+
+    def fetch_row_values(self, cell_range: str) -> list[str]:
+        sheet = self.sheets_service.spreadsheets()
+        result = sheet.values().get(
+            spreadsheetId=self.config.sheet_id,
+            range=self.format_sheet_range(cell_range),
+            majorDimension="ROWS",
+        ).execute()
+        rows = result.get("values", [])
+        return [str(value).strip() for value in (rows[0] if rows else [])]
+
+    def fetch_watch_values(self) -> list[str]:
+        return self.normalize_watch_values(self.fetch_row_values(WATCH_RANGE))
+
+    def fetch_fms_latest_update(self) -> str:
+        values = self.fetch_row_values(FMS_UPDATE_RANGE)
+        return " - ".join(value for value in values if value) or "Unavailable"
+
+    def load_watch_state(self) -> list[str] | None:
+        if not self.state_file.exists():
+            return None
+
+        try:
+            payload = json.loads(self.state_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            LOGGER.warning("Unable to read watch state file %s: %s", self.state_file, exc)
+            return None
+
+        values = payload.get("values")
+        if not isinstance(values, list):
+            return None
+        return self.normalize_watch_values(values)
+
+    def save_watch_state(self, values: list[str]) -> None:
+        payload = {
+            "range": WATCH_RANGE,
+            "saved_at": datetime.now(self.timezone).isoformat(),
+            "values": self.normalize_watch_values(values),
+        }
+        temp_path = self.state_file.with_suffix(".tmp")
+        temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temp_path.replace(self.state_file)
+
+    def should_send_update(
+        self,
+        trigger: str,
+        current_values: list[str],
+        previous_values: list[str] | None,
+    ) -> bool:
+        if trigger == "manual":
+            LOGGER.info("Manual trigger requested. Bypassing %s change detection.", WATCH_RANGE)
+            return True
+
+        if previous_values is None:
+            LOGGER.info("Initializing %s state from current sheet values without sending.", WATCH_RANGE)
+            return False
+
+        has_new_values = any(
+            current_value and current_value != previous_value
+            for previous_value, current_value in zip(previous_values, current_values)
+        )
+        if has_new_values:
+            LOGGER.info("Detected new values in %s.", WATCH_RANGE)
+        return has_new_values
+
     def capture_range_as_png(self) -> bytes:
-        runtime_root = Path(".runtime")
-        runtime_root.mkdir(exist_ok=True)
-        workdir = runtime_root / f"seatalk-bot-{uuid.uuid4().hex[:12]}"
+        workdir = self.runtime_root / f"seatalk-bot-{uuid.uuid4().hex[:12]}"
         workdir.mkdir()
         try:
             pdf_path = workdir / "sheet-range.pdf"
@@ -361,7 +442,7 @@ class SeatalkBotService:
 
     def optimize_png(self, raw_png_path: Path, final_png_path: Path) -> None:
         command = [
-            "convert",
+            self.image_magick_command,
             str(raw_png_path),
             "-trim",
             "+repage",
@@ -390,8 +471,8 @@ class SeatalkBotService:
             raise RuntimeError(f"{error_message}: {details}") from exc
 
     def send_interactive_message(self, now: datetime, image_bytes: bytes) -> dict[str, Any]:
-        timestamp = now.strftime("%I:%M %p %b-%d").lstrip("0")
-        otp_last_run = self.fetch_otp_last_run_time()
+        timestamp = f"{now.strftime('%b-%d')} {now.strftime('%I:%M %p').lstrip('0')}"
+        fms_latest_update = self.fetch_fms_latest_update()
         payload = {
             "tag": "interactive_message",
             "interactive_message": {
@@ -399,13 +480,13 @@ class SeatalkBotService:
                     {
                         "element_type": "title",
                         "title": {
-                            "text": f"SOC 5 OTP & Productivity as of {timestamp}",
+                            "text": f"SOC 5 OTP Hourly Update as of {timestamp}",
                         },
                     },
                     {
                         "element_type": "description",
                         "description": {
-                            "text": f"OTP Last Run Time: {otp_last_run}",
+                            "text": f"FMS Latest Update: {fms_latest_update}",
                         },
                     },
                     {
@@ -471,8 +552,9 @@ class SeatalkBotService:
             "last_run_succeeded_at": self.last_run_succeeded_at.isoformat() if self.last_run_succeeded_at else None,
             "next_run_at": next_run_at.isoformat(),
             "last_error": self.last_error,
-            "scheduled_hours": [7, 9, 10, 11, 12, 15, 17, 19, 20],
+            "interval_minutes": self.config.interval_minutes,
             "capture_range": self.config.capture_range,
+            "watch_range": WATCH_RANGE,
             "tab_name": self.config.tab_name,
         }
 
@@ -503,18 +585,6 @@ def build_handler(service: SeatalkBotService) -> type[BaseHTTPRequestHandler]:
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-
-        def fetch_otp_last_run_time(self) -> str:
-            sheet = self.sheets_service.spreadsheets()
-            result = sheet.values().get(
-                spreadsheetId=self.config.sheet_id,
-                range=f"{self.config.tab_name}!M1:N1",
-                majorDimension='ROWS'
-            ).execute()
-            values = result.get('values', [])
-            if values and values[0]:
-                return " - ".join(values[0])  # Or customize formatting as needed
-            return "Unavailable"
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
             LOGGER.info("%s - %s", self.address_string(), format % args)
